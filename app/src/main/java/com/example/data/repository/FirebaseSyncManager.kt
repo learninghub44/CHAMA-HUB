@@ -42,7 +42,7 @@ object FirebaseSyncManager {
             _syncStatus.value = SyncStatus.SYNCED
             Log.d(TAG, "Firebase initialized successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Firebase initialization error. Falling back to local offline-first: ${e.message}")
+            Log.e(TAG, "Firebase initialization error: ${e.message}")
             isFirebaseInitialized = false
             _syncStatus.value = SyncStatus.OFFLINE
         }
@@ -56,6 +56,10 @@ object FirebaseSyncManager {
 
     fun getCurrentUserEmail(): String? {
         return auth?.currentUser?.email
+    }
+
+    fun isEmailVerified(): Boolean {
+        return auth?.currentUser?.isEmailVerified ?: false
     }
 
     fun signOut() {
@@ -83,9 +87,8 @@ object FirebaseSyncManager {
                     onError(exception.localizedMessage ?: "Registration failed")
                 }
         } else {
-            // Offline-first simulated UID
-            _syncStatus.value = SyncStatus.OFFLINE
-            onSuccess("local_uid_" + email.hashCode())
+            _syncStatus.value = SyncStatus.ERROR
+            onError("Firebase not initialized. Authentication unavailable.")
         }
     }
 
@@ -110,33 +113,55 @@ object FirebaseSyncManager {
                     onError(exception.localizedMessage ?: "Sign in failed")
                 }
         } else {
-            // Offline-first simulated UID
-            _syncStatus.value = SyncStatus.OFFLINE
-            onSuccess("local_uid_" + email.hashCode())
+            _syncStatus.value = SyncStatus.ERROR
+            onError("Firebase not initialized. Authentication unavailable.")
         }
     }
 
-    // SMS OTP / Verification Actions
-    suspend fun sendSmsOtp(phone: String, onCodeSent: (String) -> Unit, onError: (String) -> Unit) {
-        _syncStatus.value = SyncStatus.PENDING
-        delay(1000)
-        
-        if (phone.length < 10) {
+    // Password Reset
+    fun sendPasswordResetEmail(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val firebaseAuth = auth
+        if (isFirebaseInitialized && firebaseAuth != null) {
+            _syncStatus.value = SyncStatus.PENDING
+            firebaseAuth.sendPasswordResetEmail(email)
+                .addOnSuccessListener {
+                    _syncStatus.value = SyncStatus.SYNCED
+                    onSuccess()
+                }
+                .addOnFailureListener { exception ->
+                    _syncStatus.value = SyncStatus.ERROR
+                    onError(exception.localizedMessage ?: "Failed to send reset email")
+                }
+        } else {
             _syncStatus.value = SyncStatus.ERROR
-            onError("Tafadhali weka nambari sahihi ya simu (At least 10 digits).")
-            return
+            onError("Firebase not initialized.")
         }
+    }
 
-        // Generate OTP
-        val otp = (100000..999999).random().toString()
-        onCodeSent(otp)
-        _syncStatus.value = if (isFirebaseInitialized) SyncStatus.SYNCED else SyncStatus.OFFLINE
+    // Email Verification
+    fun sendEmailVerification(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val user = auth?.currentUser
+        if (isFirebaseInitialized && user != null) {
+            _syncStatus.value = SyncStatus.PENDING
+            user.sendEmailVerification()
+                .addOnSuccessListener {
+                    _syncStatus.value = SyncStatus.SYNCED
+                    onSuccess()
+                }
+                .addOnFailureListener { exception ->
+                    _syncStatus.value = SyncStatus.ERROR
+                    onError(exception.localizedMessage ?: "Failed to send verification email")
+                }
+        } else {
+            _syncStatus.value = SyncStatus.ERROR
+            onError("User not authenticated or Firebase not initialized.")
+        }
+    }
 
-        // Send simulated real-feel SMS notification via dispatcher
-        SmsDispatcher.sendSms(
-            toPhone = phone,
-            message = "ChamaHub: Your verification OTP is $otp. Use this code to verify and access your multi-group SaaS savings account."
-        )
+    // SMS OTP / Verification Actions (Removed simulation, keeping as placeholders for actual Firebase Phone Auth if needed later)
+    suspend fun sendSmsOtp(phone: String, onCodeSent: (String) -> Unit, onError: (String) -> Unit) {
+        // TODO: Implement actual Firebase Phone Auth
+        onError("Phone authentication not yet implemented in production mode.")
     }
 
     suspend fun verifyOtpAndLogin(
@@ -146,17 +171,8 @@ object FirebaseSyncManager {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        _syncStatus.value = SyncStatus.PENDING
-        delay(600)
-        
-        if (otpEntered == correctOtp) {
-            val uid = "fb_uid_" + phone.hashCode().toString()
-            _syncStatus.value = if (isFirebaseInitialized) SyncStatus.SYNCED else SyncStatus.OFFLINE
-            onSuccess(uid)
-        } else {
-            _syncStatus.value = SyncStatus.ERROR
-            onError("Msimbo usio sahihi (Invalid OTP code entered).")
-        }
+        // TODO: Implement actual Firebase Phone Auth
+        onError("Phone authentication not yet implemented in production mode.")
     }
 
     // --- Cloud Database synchronization (Room -> Firestore synchronization) ---

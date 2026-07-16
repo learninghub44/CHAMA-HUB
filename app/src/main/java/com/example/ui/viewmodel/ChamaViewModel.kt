@@ -334,26 +334,20 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
                 onError = { err ->
-                    // Network offline or error - try fallback local DB login if exists
-                    viewModelScope.launch {
-                        val localUser = chamaRepository.getUserByEmail(email)
-                        if (localUser != null && localUser.passwordHash == password) {
-                            _currentUser.value = localUser
-                            val groups = chamaRepository.getGroupsForUser(localUser.id).first()
-                            if (groups.isNotEmpty()) {
-                                _activeGroupId.value = groups.first().id
-                                _currency.value = groups.first().currency
-                            } else {
-                                _activeGroupId.value = null
-                            }
-                            onSuccess()
-                        } else {
-                            onError(err)
-                        }
-                    }
+                    // For production, we prioritize Firebase login.
+                    // Fallback to local is only allowed if we have a valid session cached.
+                    onError(err)
                 }
             )
         }
+    }
+
+    fun resetPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        FirebaseSyncManager.sendPasswordResetEmail(email, onSuccess, onError)
+    }
+
+    fun sendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        FirebaseSyncManager.sendEmailVerification(onSuccess, onError)
     }
 
     // --- Group Selection / Switch Group ---
