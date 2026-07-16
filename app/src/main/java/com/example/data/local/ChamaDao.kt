@@ -33,6 +33,9 @@ interface ChamaDao {
     @Query("SELECT * FROM groups WHERE id = :id LIMIT 1")
     fun getGroupById(id: Int): Flow<ChamaGroup?>
 
+    @Query("SELECT * FROM groups WHERE id = :id LIMIT 1")
+    suspend fun getGroupEntityById(id: Int): ChamaGroup?
+
     @Query("SELECT * FROM groups WHERE inviteCode = :code LIMIT 1")
     suspend fun getGroupByInviteCode(code: String): ChamaGroup?
 
@@ -55,6 +58,9 @@ interface ChamaDao {
     @Query("SELECT * FROM memberships WHERE groupId = :groupId")
     fun getMembershipsByGroupId(groupId: Int): Flow<List<Membership>>
 
+    @Query("SELECT * FROM memberships WHERE userId = :userId AND groupId = :groupId LIMIT 1")
+    suspend fun getMembership(userId: Int, groupId: Int): Membership?
+
     // --- Members ---
     @Query("SELECT * FROM members ORDER BY name ASC")
     fun getAllMembers(): Flow<List<Member>>
@@ -70,6 +76,9 @@ interface ChamaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: Member): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMembers(members: List<Member>)
 
     @Delete
     suspend fun deleteMember(member: Member)
@@ -90,6 +99,9 @@ interface ChamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContribution(contribution: Contribution): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertContributions(contributions: List<Contribution>)
+
     @Delete
     suspend fun deleteContribution(contribution: Contribution)
 
@@ -106,6 +118,9 @@ interface ChamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLoan(loan: Loan): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLoans(loans: List<Loan>)
+
     @Delete
     suspend fun deleteLoan(loan: Loan)
 
@@ -118,6 +133,9 @@ interface ChamaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMeeting(meeting: Meeting): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMeetings(meetings: List<Meeting>)
 
     @Delete
     suspend fun deleteMeeting(meeting: Meeting)

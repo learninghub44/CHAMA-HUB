@@ -423,7 +423,17 @@ fun LoginScreen(
                                 color = EmeraldGreen,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable { localErrorMessage = "Password recovery link dispatched to your email." }
+                                modifier = Modifier.clickable {
+                                    if (email.isBlank()) {
+                                        localErrorMessage = "Please enter your email to reset password."
+                                    } else {
+                                        viewModel?.resetPassword(email.trim(), {
+                                            localErrorMessage = "Password recovery link dispatched to $email."
+                                        }, { err ->
+                                            localErrorMessage = err
+                                        })
+                                    }
+                                }
                             )
                         }
 
