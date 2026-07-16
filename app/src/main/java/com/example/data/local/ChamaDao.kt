@@ -71,6 +71,9 @@ interface ChamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: Member): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMembers(members: List<Member>)
+
     @Delete
     suspend fun deleteMember(member: Member)
 
@@ -90,6 +93,9 @@ interface ChamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContribution(contribution: Contribution): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertContributions(contributions: List<Contribution>)
+
     @Delete
     suspend fun deleteContribution(contribution: Contribution)
 
@@ -106,6 +112,9 @@ interface ChamaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLoan(loan: Loan): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLoans(loans: List<Loan>)
+
     @Delete
     suspend fun deleteLoan(loan: Loan)
 
@@ -118,6 +127,9 @@ interface ChamaDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMeeting(meeting: Meeting): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMeetings(meetings: List<Meeting>)
 
     @Delete
     suspend fun deleteMeeting(meeting: Meeting)

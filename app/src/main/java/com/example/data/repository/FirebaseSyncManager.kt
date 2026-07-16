@@ -6,13 +6,19 @@ import com.example.data.model.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 enum class SyncStatus {
     SYNCED,
@@ -42,7 +48,7 @@ object FirebaseSyncManager {
             _syncStatus.value = SyncStatus.SYNCED
             Log.d(TAG, "Firebase initialized successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Firebase initialization error. Falling back to local offline-first: ${e.message}")
+            Log.e(TAG, "Firebase initialization error: ${e.message}")
             isFirebaseInitialized = false
             _syncStatus.value = SyncStatus.OFFLINE
         }
@@ -50,324 +56,166 @@ object FirebaseSyncManager {
 
     fun isAvailable(): Boolean = isFirebaseInitialized
 
-    fun getCurrentUserUid(): String? {
-        return auth?.currentUser?.uid
-    }
+    fun getCurrentUserUid(): String? = auth?.currentUser?.uid
+    fun getCurrentUserEmail(): String? = auth?.currentUser?.email
+    fun isEmailVerified(): Boolean = auth?.currentUser?.isEmailVerified ?: false
+    fun signOut() = auth?.signOut()
 
-    fun getCurrentUserEmail(): String? {
-        return auth?.currentUser?.email
-    }
-
-    fun signOut() {
-        auth?.signOut()
-    }
-
-    // Email/Password Registration
-    fun registerUserWithEmail(
-        email: String,
-        password: String,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val firebaseAuth = auth
-        if (isFirebaseInitialized && firebaseAuth != null) {
-            _syncStatus.value = SyncStatus.PENDING
-            firebaseAuth.createUserWithEmailAndPassword(email, password)
-                .addOnSuccessListener { result ->
-                    val uid = result.user?.uid ?: ""
-                    _syncStatus.value = SyncStatus.SYNCED
-                    onSuccess(uid)
-                }
-                .addOnFailureListener { exception ->
-                    _syncStatus.value = SyncStatus.ERROR
-                    onError(exception.localizedMessage ?: "Registration failed")
-                }
-        } else {
-            // Offline-first simulated UID
-            _syncStatus.value = SyncStatus.OFFLINE
-            onSuccess("local_uid_" + email.hashCode())
-        }
-    }
-
-    // Email/Password Login
-    fun loginUserWithEmail(
-        email: String,
-        password: String,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val firebaseAuth = auth
-        if (isFirebaseInitialized && firebaseAuth != null) {
-            _syncStatus.value = SyncStatus.PENDING
-            firebaseAuth.signInWithEmailAndPassword(email, password)
-                .addOnSuccessListener { result ->
-                    val uid = result.user?.uid ?: ""
-                    _syncStatus.value = SyncStatus.SYNCED
-                    onSuccess(uid)
-                }
-                .addOnFailureListener { exception ->
-                    _syncStatus.value = SyncStatus.ERROR
-                    onError(exception.localizedMessage ?: "Sign in failed")
-                }
-        } else {
-            // Offline-first simulated UID
-            _syncStatus.value = SyncStatus.OFFLINE
-            onSuccess("local_uid_" + email.hashCode())
-        }
-    }
-
-    // SMS OTP / Verification Actions
-    suspend fun sendSmsOtp(phone: String, onCodeSent: (String) -> Unit, onError: (String) -> Unit) {
+    // --- Authentication ---
+    fun registerUserWithEmail(email: String, password: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        if (!isFirebaseInitialized) { onError("Firebase not initialized"); return }
         _syncStatus.value = SyncStatus.PENDING
-        delay(1000)
-        
-        if (phone.length < 10) {
-            _syncStatus.value = SyncStatus.ERROR
-            onError("Tafadhali weka nambari sahihi ya simu (At least 10 digits).")
-            return
-        }
-
-        // Generate OTP
-        val otp = (100000..999999).random().toString()
-        onCodeSent(otp)
-        _syncStatus.value = if (isFirebaseInitialized) SyncStatus.SYNCED else SyncStatus.OFFLINE
-
-        // Send simulated real-feel SMS notification via dispatcher
-        SmsDispatcher.sendSms(
-            toPhone = phone,
-            message = "ChamaHub: Your verification OTP is $otp. Use this code to verify and access your multi-group SaaS savings account."
-        )
+        auth?.createUserWithEmailAndPassword(email, password)
+            ?.addOnSuccessListener { result ->
+                _syncStatus.value = SyncStatus.SYNCED
+                onSuccess(result.user?.uid ?: "")
+            }
+            ?.addOnFailureListener { e ->
+                _syncStatus.value = SyncStatus.ERROR
+                onError(e.localizedMessage ?: "Registration failed")
+            }
     }
 
-    suspend fun verifyOtpAndLogin(
-        phone: String,
-        otpEntered: String,
-        correctOtp: String,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
+    fun loginUserWithEmail(email: String, password: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        if (!isFirebaseInitialized) { onError("Firebase not initialized"); return }
         _syncStatus.value = SyncStatus.PENDING
-        delay(600)
-        
-        if (otpEntered == correctOtp) {
-            val uid = "fb_uid_" + phone.hashCode().toString()
-            _syncStatus.value = if (isFirebaseInitialized) SyncStatus.SYNCED else SyncStatus.OFFLINE
-            onSuccess(uid)
-        } else {
-            _syncStatus.value = SyncStatus.ERROR
-            onError("Msimbo usio sahihi (Invalid OTP code entered).")
-        }
+        auth?.signInWithEmailAndPassword(email, password)
+            ?.addOnSuccessListener { result ->
+                _syncStatus.value = SyncStatus.SYNCED
+                onSuccess(result.user?.uid ?: "")
+            }
+            ?.addOnFailureListener { e ->
+                _syncStatus.value = SyncStatus.ERROR
+                onError(e.localizedMessage ?: "Sign in failed")
+            }
     }
 
-    // --- Cloud Database synchronization (Room -> Firestore synchronization) ---
-    fun syncUserProfileToCloud(user: User) {
-        CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "userId" to user.id,
-                        "name" to user.name,
-                        "email" to user.email,
-                        "phone" to user.phone,
-                        "role" to user.role,
-                        "firebaseUid" to user.firebaseUid,
-                        "createdAt" to user.createdAt,
-                        "lastLogin" to user.lastLogin
-                    )
-                    db?.collection("users")?.document(user.firebaseUid.ifEmpty { user.id.toString() })?.set(data)
-                    Log.d(TAG, "Successfully synced user profile to Firestore.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync user profile: ${e.message}")
+    fun sendPasswordResetEmail(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        auth?.sendPasswordResetEmail(email)?.addOnSuccessListener { onSuccess() }?.addOnFailureListener { e -> onError(e.localizedMessage ?: "Error") }
+    }
+
+    fun sendEmailVerification(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        auth?.currentUser?.sendEmailVerification()?.addOnSuccessListener { onSuccess() }?.addOnFailureListener { e -> onError(e.localizedMessage ?: "Error") }
+    }
+
+    // --- Firestore Real-time Listeners (Cloud-First) ---
+    fun <T> observeCollection(path: String, clazz: Class<T>): Flow<List<T>> = callbackFlow {
+        if (!isFirebaseInitialized || db == null) {
+            close()
+            return@callbackFlow
+        }
+        val subscription = db!!.collection(path)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    _syncStatus.value = SyncStatus.ERROR
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val items = snapshot.toObjects(clazz)
+                    trySend(items)
+                    _syncStatus.value = SyncStatus.SYNCED
                 }
             }
+        awaitClose { subscription.remove() }
+    }
+
+    // --- Sync Operations ---
+    suspend fun saveToCloud(collection: String, id: String, data: Any) {
+        if (!isFirebaseInitialized || db == null) return
+        try {
+            _syncStatus.value = SyncStatus.PENDING
+            db!!.collection(collection).document(id).set(data).await()
+            _syncStatus.value = SyncStatus.SYNCED
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving to cloud: ${e.message}")
+            _syncStatus.value = SyncStatus.ERROR
+        }
+    }
+
+    suspend fun deleteFromCloud(collection: String, id: String) {
+        if (!isFirebaseInitialized || db == null) return
+        try {
+            db!!.collection(collection).document(id).delete().await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting from cloud: ${e.message}")
+        }
+    }
+
+    // --- Legacy Compatibility Methods (to be refactored out gradually) ---
+    fun syncUserProfileToCloud(user: User) {
+        CoroutineScope(Dispatchers.IO).launch {
+            saveToCloud("users", user.firebaseUid.ifEmpty { user.id.toString() }, user)
         }
     }
 
     fun syncGroupWithCloud(groupId: Int, details: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            _syncStatus.value = SyncStatus.PENDING
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "groupId" to groupId,
-                        "lastSync" to System.currentTimeMillis(),
-                        "details" to details
-                    )
-                    db?.collection("groups")?.document(groupId.toString())?.set(data)
-                    _syncStatus.value = SyncStatus.SYNCED
-                    Log.d(TAG, "Successfully synced group $groupId metadata to Firestore.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Firestore sync failed: ${e.message}")
-                    _syncStatus.value = SyncStatus.ERROR
-                }
-            } else {
-                _syncStatus.value = SyncStatus.OFFLINE
-            }
+            val data = hashMapOf("groupId" to groupId, "lastSync" to System.currentTimeMillis(), "details" to details)
+            saveToCloud("groups", groupId.toString(), data)
         }
     }
 
     fun syncMemberWithCloud(member: Member) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "id" to member.id,
-                        "groupId" to member.groupId,
-                        "name" to member.name,
-                        "phone" to member.phone,
-                        "email" to member.email,
-                        "role" to member.role,
-                        "joinedDate" to member.joinedDate,
-                        "contributionStatus" to member.contributionStatus,
-                        "loanStatus" to member.loanStatus,
-                        "lastUpdated" to System.currentTimeMillis()
-                    )
-                    db?.collection("groups")?.document(member.groupId.toString())
-                        ?.collection("members")?.document(member.id.toString())?.set(data)
-                    Log.d(TAG, "Successfully synced member ${member.name} to Firestore.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync member: ${e.message}")
-                }
-            }
+            saveToCloud("groups/${member.groupId}/members", member.id.toString(), member)
         }
     }
 
     fun deleteMemberFromCloud(groupId: Int, memberId: Int) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    db?.collection("groups")?.document(groupId.toString())
-                        ?.collection("members")?.document(memberId.toString())?.delete()
-                    Log.d(TAG, "Successfully deleted member $memberId from Firestore.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to delete member from cloud: ${e.message}")
-                }
-            }
+            deleteFromCloud("groups/$groupId/members", memberId.toString())
         }
     }
 
     fun syncContributionWithCloud(contribution: Contribution) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "id" to contribution.id,
-                        "groupId" to contribution.groupId,
-                        "memberId" to contribution.memberId,
-                        "memberName" to contribution.memberName,
-                        "amount" to contribution.amount,
-                        "date" to contribution.date,
-                        "status" to contribution.status,
-                        "notes" to contribution.notes,
-                        "lastUpdated" to System.currentTimeMillis()
-                    )
-                    db?.collection("groups")?.document(contribution.groupId.toString())
-                        ?.collection("contributions")?.document(contribution.id.toString())?.set(data)
-                    Log.d(TAG, "Successfully synced contribution to Firestore.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync contribution: ${e.message}")
-                }
-            }
+            saveToCloud("groups/${contribution.groupId}/contributions", contribution.id.toString(), contribution)
         }
     }
 
     fun deleteContributionFromCloud(groupId: Int, contributionId: Int) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    db?.collection("groups")?.document(groupId.toString())
-                        ?.collection("contributions")?.document(contributionId.toString())?.delete()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to delete contribution: ${e.message}")
-                }
-            }
+            deleteFromCloud("groups/$groupId/contributions", contributionId.toString())
         }
     }
 
     fun syncLoanWithCloud(loan: Loan) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "id" to loan.id,
-                        "groupId" to loan.groupId,
-                        "memberId" to loan.memberId,
-                        "memberName" to loan.memberName,
-                        "amount" to loan.amount,
-                        "remainingBalance" to loan.remainingBalance,
-                        "interestRate" to loan.interestRate,
-                        "status" to loan.status,
-                        "durationMonths" to loan.durationMonths,
-                        "issueDate" to loan.issueDate,
-                        "dueDate" to loan.dueDate,
-                        "riskScore" to loan.riskScore,
-                        "riskReason" to loan.riskReason,
-                        "lastUpdated" to System.currentTimeMillis()
-                    )
-                    db?.collection("groups")?.document(loan.groupId.toString())
-                        ?.collection("loans")?.document(loan.id.toString())?.set(data)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync loan: ${e.message}")
-                }
-            }
+            saveToCloud("groups/${loan.groupId}/loans", loan.id.toString(), loan)
         }
     }
 
     fun deleteLoanFromCloud(groupId: Int, loanId: Int) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    db?.collection("groups")?.document(groupId.toString())
-                        ?.collection("loans")?.document(loanId.toString())?.delete()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to delete loan: ${e.message}")
-                }
-            }
+            deleteFromCloud("groups/$groupId/loans", loanId.toString())
         }
     }
 
     fun syncMeetingWithCloud(meeting: Meeting) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    val data = hashMapOf(
-                        "id" to meeting.id,
-                        "groupId" to meeting.groupId,
-                        "title" to meeting.title,
-                        "date" to meeting.date,
-                        "time" to meeting.time,
-                        "agenda" to meeting.agenda,
-                        "notes" to meeting.notes,
-                        "lastUpdated" to System.currentTimeMillis()
-                    )
-                    db?.collection("groups")?.document(meeting.groupId.toString())
-                        ?.collection("meetings")?.document(meeting.id.toString())?.set(data)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync meeting: ${e.message}")
-                }
-            }
+            saveToCloud("groups/${meeting.groupId}/meetings", meeting.id.toString(), meeting)
         }
     }
 
     fun deleteMeetingFromCloud(groupId: Int, meetingId: Int) {
         CoroutineScope(Dispatchers.IO).launch {
-            if (isFirebaseInitialized && db != null) {
-                try {
-                    db?.collection("groups")?.document(groupId.toString())
-                        ?.collection("meetings")?.document(meetingId.toString())?.delete()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to delete meeting: ${e.message}")
-                }
-            }
+            deleteFromCloud("groups/$groupId/meetings", meetingId.toString())
         }
     }
 
-    fun triggerRealtimeUpdateNotification(groupId: Int, notificationTitle: String, notificationBody: String) {
+    fun triggerRealtimeUpdateNotification(groupId: Int, title: String, body: String) {
         CoroutineScope(Dispatchers.IO).launch {
             _syncStatus.value = SyncStatus.PENDING
             delay(500)
             _syncStatus.value = if (isFirebaseInitialized) SyncStatus.SYNCED else SyncStatus.OFFLINE
-            Log.d(TAG, "Real-time update triggered: $notificationTitle")
         }
+    }
+
+    suspend fun sendSmsOtp(phone: String, onCodeSent: (String) -> Unit, onError: (String) -> Unit) {
+        onError("Phone authentication not yet implemented in production mode.")
+    }
+
+    suspend fun verifyOtpAndLogin(phone: String, otpEntered: String, correctOtp: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        onError("Phone authentication not yet implemented in production mode.")
     }
 }
