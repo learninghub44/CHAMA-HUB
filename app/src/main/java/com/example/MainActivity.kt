@@ -49,6 +49,7 @@ fun ChamaAppContent(viewModel: ChamaViewModel) {
     val allGroups by viewModel.allGroups.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
+    val userMembership by viewModel.userMembership.collectAsState()
 
     // Sub-screen parameters
     val selectedMember by viewModel.selectedMember.collectAsState()
@@ -93,7 +94,7 @@ fun ChamaAppContent(viewModel: ChamaViewModel) {
             JoinGroupScreen(
                 availableGroups = allGroups,
                 onJoinSubmitted = { code, onError ->
-                    viewModel.joinGroupByInviteCode(
+                    viewModel.joinGroup(
                         inviteCode = code,
                         onSuccess = {
                             viewModel.navigateTo("dashboard")
@@ -221,7 +222,8 @@ fun ChamaAppContent(viewModel: ChamaViewModel) {
                     },
                     onToggleTheme = { viewModel.toggleDarkMode() },
                     currentUser = currentUser,
-                    syncStatus = syncStatus
+                    syncStatus = syncStatus,
+                    userMembership = userMembership
                 )
             } ?: run {
                 // Safe Fallback

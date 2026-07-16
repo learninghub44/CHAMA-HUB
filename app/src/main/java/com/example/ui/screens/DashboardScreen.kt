@@ -45,7 +45,8 @@ fun DashboardScreen(
     onQuickAction: (String) -> Unit,
     onToggleTheme: () -> Unit,
     currentUser: User? = null,
-    syncStatus: SyncStatus = SyncStatus.SYNCED
+    syncStatus: SyncStatus = SyncStatus.SYNCED,
+    userMembership: Membership? = null
 ) {
     val scrollState = rememberScrollState()
 
@@ -61,7 +62,7 @@ fun DashboardScreen(
     // Role-based state permissions dialog
     var permissionDeniedMsg by remember { mutableStateOf<String?>(null) }
 
-    val userRole = currentUser?.role ?: "Owner" // Default to Owner if not set for backward safety
+    val userRole = userMembership?.role ?: "Member"
 
     Box(
         modifier = Modifier
