@@ -50,6 +50,18 @@ object FirebaseSyncManager {
 
     fun isAvailable(): Boolean = isFirebaseInitialized
 
+    fun getCurrentUserUid(): String? {
+        return auth?.currentUser?.uid
+    }
+
+    fun getCurrentUserEmail(): String? {
+        return auth?.currentUser?.email
+    }
+
+    fun signOut() {
+        auth?.signOut()
+    }
+
     // Email/Password Registration
     fun registerUserWithEmail(
         email: String,

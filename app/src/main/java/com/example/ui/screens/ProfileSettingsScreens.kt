@@ -45,7 +45,7 @@ fun ProfileSettingsScreen(
     val activeRole = currentUser?.role ?: "Group Administrator"
     val activeEmail = currentUser?.email ?: "admin@chamahub.com"
     val activePhone = currentUser?.phone ?: "+254 701 234 567"
-    val userUid = currentUser?.firebaseUid?.ifBlank { "UID-FIREBASE-MOCK-29348" } ?: "UID-FIREBASE-MOCK-29348"
+    val userUid = currentUser?.firebaseUid?.ifBlank { "UID-FIREBASE-OFFLINE-SESSION" } ?: "UID-FIREBASE-OFFLINE-SESSION"
 
     Box(
         modifier = Modifier

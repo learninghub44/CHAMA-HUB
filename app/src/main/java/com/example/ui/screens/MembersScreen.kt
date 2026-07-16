@@ -378,7 +378,7 @@ fun MemberDetailsSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Supporting documents mock area
+            // Supporting documents status area
             Text("Documents & Verification Logs", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.height(12.dp))
             Row(

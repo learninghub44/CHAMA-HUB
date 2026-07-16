@@ -42,15 +42,15 @@ fun LoginScreen(
     var activeTab by remember { mutableStateOf(0) } // 0 = Phone OTP, 1 = Email/Pass
     
     // Email/Pass state
-    var email by remember { mutableStateOf("chrisodhiambo444@gmail.com") }
-    var password by remember { mutableStateOf("password") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var rememberMe by remember { mutableStateOf(true) }
     var passwordVisible by remember { mutableStateOf(false) }
     
     // Phone OTP state
-    var phoneInput by remember { mutableStateOf("+254 701 234 567") }
-    var fullNameInput by remember { mutableStateOf("Chris Odhiambo") }
-    var emailInputForOtp by remember { mutableStateOf("chris@chamahub.com") }
+    var phoneInput by remember { mutableStateOf("") }
+    var fullNameInput by remember { mutableStateOf("") }
+    var emailInputForOtp by remember { mutableStateOf("") }
     var otpEntered by remember { mutableStateOf("") }
     
     var localErrorMessage by remember { mutableStateOf<String?>(null) }

@@ -371,7 +371,7 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
     fun createFirstGroup(name: String, desc: String, frequency: String, currency: String, contributionAmt: Double, adminName: String) {
         viewModelScope.launch {
             val uId = _currentUser.value?.id ?: 1
-            val generatedId = chamaRepository.populateSampleDataForUser(
+            val generatedId = chamaRepository.initializeGroupForUser(
                 userId = uId,
                 groupName = name,
                 adminName = adminName,
@@ -439,7 +439,7 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
     fun joinExistingGroup(groupName: String, adminName: String) {
         viewModelScope.launch {
             val uId = _currentUser.value?.id ?: 1
-            val generatedId = chamaRepository.populateSampleDataForUser(
+            val generatedId = chamaRepository.initializeGroupForUser(
                 userId = uId,
                 groupName = groupName,
                 adminName = adminName,
@@ -608,9 +608,47 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        FirebaseSyncManager.signOut()
         _currentUser.value = null
         _activeGroupId.value = null
         _currentScreen.value = "welcome"
+    }
+
+    fun checkFirebaseSession(onFinished: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val fbUid = FirebaseSyncManager.getCurrentUserUid()
+            val fbEmail = FirebaseSyncManager.getCurrentUserEmail()
+            if (!fbUid.isNullOrEmpty() && !fbEmail.isNullOrEmpty()) {
+                var user = chamaRepository.getUserByEmail(fbEmail)
+                if (user == null) {
+                    val newUser = User(
+                        name = fbEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
+                        email = fbEmail,
+                        phone = "+254 700 000 000",
+                        passwordHash = "firebase_auth_session",
+                        firebaseUid = fbUid,
+                        role = "Owner"
+                    )
+                    val newId = chamaRepository.insertUser(newUser)
+                    user = newUser.copy(id = newId.toInt())
+                }
+                _currentUser.value = user
+                
+                // Get user's active groups
+                val groups = chamaRepository.getGroupsForUser(user.id).first()
+                if (groups.isNotEmpty()) {
+                    _activeGroupId.value = groups.first().id
+                    _currency.value = groups.first().currency
+                } else {
+                    _activeGroupId.value = null
+                }
+                onFinished(true)
+            } else {
+                _currentUser.value = null
+                _activeGroupId.value = null
+                onFinished(false)
+            }
+        }
     }
 
     // --- AI Assistants ---

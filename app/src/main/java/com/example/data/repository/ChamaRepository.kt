@@ -232,8 +232,8 @@ class ChamaRepository(private val chamaDao: ChamaDao) {
         chamaDao.insertLog(ActivityLog(groupId = groupId, userName = userName, action = action, details = details))
     }
 
-    // --- Populate Sample Data ---
-    suspend fun populateSampleDataForUser(userId: Int, groupName: String, adminName: String, currency: String, contributionAmt: Double): Int {
+    // --- Initialize Group and Admin Membership ---
+    suspend fun initializeGroupForUser(userId: Int, groupName: String, adminName: String, currency: String, contributionAmt: Double): Int {
         val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val today = formatter.format(Date())
 

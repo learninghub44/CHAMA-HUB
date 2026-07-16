@@ -63,11 +63,13 @@ fun ChamaAppContent(viewModel: ChamaViewModel) {
         "splash" -> {
             SplashScreen(
                 onAnimationFinished = {
-                    // Route to onboarding or login depending on database state
-                    if (group != null) {
-                        viewModel.navigateTo("dashboard")
-                    } else {
-                        viewModel.navigateTo("onboarding")
+                    // Check Firebase session first
+                    viewModel.checkFirebaseSession { hasSession ->
+                        if (hasSession) {
+                            viewModel.navigateTo("dashboard")
+                        } else {
+                            viewModel.navigateTo("onboarding")
+                        }
                     }
                 }
             )

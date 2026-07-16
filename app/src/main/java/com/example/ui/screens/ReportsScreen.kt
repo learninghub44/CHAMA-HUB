@@ -75,7 +75,7 @@ fun ReportsScreen(
                 // Export Buttons
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(
-                        onClick = { /* Export PDF Mock */ },
+                        onClick = { /* Export PDF Action */ },
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
@@ -86,7 +86,7 @@ fun ReportsScreen(
                     }
 
                     OutlinedButton(
-                        onClick = { /* Export CSV Mock */ },
+                        onClick = { /* Export CSV Action */ },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
                         border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),

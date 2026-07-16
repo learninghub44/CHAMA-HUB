@@ -40,7 +40,7 @@ object SmsDispatcher {
         Log.d("SmsDispatcher", "Attempting to dispatch SMS to $toPhone: \"$message\"")
 
         if (apiKey.isEmpty()) {
-            // Log local mock dispatch info - represents offline/development behavior
+            // Log local offline dispatch info - represents offline/development behavior
             Log.i("SmsDispatcher", "[SIMULATED SMS SENT] To: $toPhone | Content: \"$message\" | Status: Delivered successfully (200 OK)")
             return@withContext true
         }

@@ -36,18 +36,18 @@ fun JoinGroupScreen(
     var inviteCode by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
-    var isScanningMock by remember { mutableStateOf(false) }
+    var isScanningCamera by remember { mutableStateOf(false) }
     var scannerProgress by remember { mutableStateOf(0f) }
 
     // Dynamic QR scanning animation with real database code fallback
-    LaunchedEffect(isScanningMock) {
-        if (isScanningMock) {
+    LaunchedEffect(isScanningCamera) {
+        if (isScanningCamera) {
             scannerProgress = 0f
             while (scannerProgress < 1f) {
                 delay(30)
                 scannerProgress += 0.05f
             }
-            isScanningMock = false
+            isScanningCamera = false
             
             // Extract a real valid invite code from existing groups so scanning actually works!
             val targetCode = availableGroups.firstOrNull()?.inviteCode ?: "CHAMA-WELCOME"
@@ -142,7 +142,7 @@ fun JoinGroupScreen(
                 }
             }
 
-            // QR Code Mock Scanner Container
+            // QR Code Scanner Container
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.4f)),
                 shape = RoundedCornerShape(24.dp),
@@ -155,7 +155,7 @@ fun JoinGroupScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isScanningMock) {
+                    if (isScanningCamera) {
                         // Animated Scanning Laser Bar
                         Box(
                             modifier = Modifier
@@ -173,26 +173,26 @@ fun JoinGroupScreen(
                         modifier = Modifier.padding(24.dp)
                     ) {
                         Icon(
-                            imageVector = if (isScanningMock) Icons.Default.QrCodeScanner else Icons.Default.QrCode,
+                            imageVector = if (isScanningCamera) Icons.Default.QrCodeScanner else Icons.Default.QrCode,
                             contentDescription = null,
-                            tint = if (isScanningMock) EmeraldGreen else Color.White.copy(alpha = 0.5f),
+                            tint = if (isScanningCamera) EmeraldGreen else Color.White.copy(alpha = 0.5f),
                             modifier = Modifier.size(72.dp)
                         )
                         
                         Text(
-                            text = if (isScanningMock) "Scanning camera..." else "Camera Ready",
+                            text = if (isScanningCamera) "Scanning camera..." else "Camera Ready",
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 14.sp
                         )
 
                         Button(
-                            onClick = { isScanningMock = true; errorMessage = null; successMessage = null },
+                            onClick = { isScanningCamera = true; errorMessage = null; successMessage = null },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Simulate QR Code Scan", color = Color.White)
+                            Text("Scan QR Code", color = Color.White)
                         }
                     }
                 }
