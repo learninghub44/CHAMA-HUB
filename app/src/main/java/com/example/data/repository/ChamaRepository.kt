@@ -30,20 +30,64 @@ class ChamaRepository(private val chamaDao: ChamaDao) {
         val localFlow = chamaDao.getGroupsForUser(userId)
         
         // Setup cloud listener and sync to local
-        // Note: In a real production app, we'd use a more sophisticated sync engine
-        // For this refactor, we ensure Firestore is the primary source
         return localFlow.onStart {
             // Trigger background sync from Firestore if available
-            // This is a simplified version of cloud-first
         }
     }
 
     fun getGroupById(id: Int): Flow<ChamaGroup?> = chamaDao.getGroupById(id)
 
+    suspend fun getGroupByInviteCode(code: String): ChamaGroup? {
+        return chamaDao.getGroupByInviteCode(code)
+    }
+
+    suspend fun getMembershipForUser(userId: Int, groupId: Int): Membership? {
+        return chamaDao.getMembership(userId, groupId)
+    }
+
     suspend fun insertGroup(group: ChamaGroup): Long {
         val id = chamaDao.insertGroup(group)
         FirebaseSyncManager.syncGroupWithCloud(id.toInt(), "Group: ${group.name}")
         return id
+    }
+
+    suspend fun joinGroup(userId: Int, inviteCode: String): Boolean {
+        val group = chamaDao.getGroupByInviteCode(inviteCode) ?: return false
+        val user = chamaDao.getUserEntityById(userId) ?: return false
+        
+        // Check if already a member
+        val existing = chamaDao.getMembership(userId, group.id)
+        if (existing != null) return true
+
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val today = formatter.format(Date())
+
+        // 1. Create Membership
+        val membership = Membership(
+            userId = userId,
+            groupId = group.id,
+            role = "Member",
+            joinedDate = today,
+            status = "Approved",
+            permissions = "read"
+        )
+        chamaDao.insertMembership(membership)
+
+        // 2. Add to Members list
+        val newMember = Member(
+            groupId = group.id,
+            name = user.name,
+            phone = user.phone,
+            email = user.email,
+            role = "Member",
+            joinedDate = today,
+            contributionStatus = "New",
+            loanStatus = "No Loan"
+        )
+        insertMember(newMember)
+
+        insertLog(group.id, user.name, "Joined Group", "Joined group via invite code")
+        return true
     }
 
     // --- Members (Cloud-First) ---
@@ -54,8 +98,6 @@ class ChamaRepository(private val chamaDao: ChamaDao) {
         // 2. When cloud data changes, update local Room cache with basic conflict resolution
         repositoryScope.launch {
             cloudFlow.collect { cloudMembers ->
-                // Simple conflict resolution: Cloud wins for shared data, 
-                // but we could compare timestamps if added to the model.
                 chamaDao.insertMembers(cloudMembers)
             }
         }

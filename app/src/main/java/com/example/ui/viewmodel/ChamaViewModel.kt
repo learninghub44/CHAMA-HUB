@@ -34,6 +34,14 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeGroupId = MutableStateFlow<Int?>(null)
     val activeGroupId: StateFlow<Int?> = _activeGroupId.asStateFlow()
 
+    val userMembership: StateFlow<Membership?> = combine(_currentUser, _activeGroupId) { user, groupId ->
+        if (user != null && groupId != null) {
+            chamaRepository.getMembershipForUser(user.id, groupId)
+        } else {
+            null
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     // Multi-Group Separation: All groups the current user belongs to
     val allGroups: StateFlow<List<ChamaGroup>> = _currentUser.flatMapLatest { user ->
         if (user != null) chamaRepository.getGroupsForUser(user.id) else flowOf(emptyList())
@@ -158,6 +166,16 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectMeeting(meeting: Meeting?) {
         _selectedMeeting.value = meeting
+    }
+
+    fun hasPermission(permission: String): Boolean {
+        val membership = userMembership.value ?: return false
+        return when (permission) {
+            "write" -> membership.permissions.contains("write") || membership.role in listOf("Owner", "Admin", "Treasurer")
+            "admin" -> membership.role in listOf("Owner", "Admin")
+            "owner" -> membership.role == "Owner"
+            else -> membership.permissions.contains(permission)
+        }
     }
 
     // --- SMS OTP flows ---
@@ -353,7 +371,31 @@ class ChamaViewModel(application: Application) : AndroidViewModel(application) {
     // --- Group Selection / Switch Group ---
     fun switchGroup(groupId: Int) {
         _activeGroupId.value = groupId
+    }
+
+    fun joinGroup(inviteCode: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val user = _currentUser.value
+        if (user == null) {
+            onError("You must be logged in to join a group.")
+            return
+        }
+
         viewModelScope.launch {
+            val success = chamaRepository.joinGroup(user.id, inviteCode)
+            if (success) {
+                // Refresh group list and select the new group
+                val updatedGroups = chamaRepository.getGroupsForUser(user.id).first()
+                val newGroup = updatedGroups.find { it.inviteCode == inviteCode }
+                if (newGroup != null) {
+                    _activeGroupId.value = newGroup.id
+                    _currency.value = newGroup.currency
+                }
+                onSuccess()
+            } else {
+                onError("Invalid invite code or group not found.")
+            }
+        }
+    }    viewModelScope.launch {
             val grp = chamaRepository.getGroupById(groupId).firstOrNull()
             if (grp != null) {
                 _currency.value = grp.currency
